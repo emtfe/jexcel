@@ -53,11 +53,11 @@ var methods = {
             // Allow table edition
             editable:true,
             // Allow new rows
-            allowInsertRow:true,
+            allowInsertRow:false,
             // Allow new rows
             allowManualInsertRow:true,
             // Allow new columns
-            allowInsertColumn:true,
+            allowInsertColumn:false,
             // Allow new rows
             allowManualInsertColumn:true,
             // Allow row delete
@@ -68,8 +68,9 @@ var methods = {
             wordWrap:false,
             // ID of the table
             tableId:null,
+            localDB:[]
             // About message
-            about:'jExcel Spreadsheet\\nVersion 1.3.3\\nAuthor: Paul Hodel <paul.hodel@gmail.com>\\nWebsite: http://bossanova.uk/jexcel'
+            //about:'jExcel Spreadsheet\\nVersion 1.3.3\\nAuthor: Paul Hodel <paul.hodel@gmail.com>\\nWebsite: http://bossanova.uk/jexcel'
         };
 
         // Configuration holder
@@ -96,6 +97,14 @@ var methods = {
                 $.fn.jexcel.defaults = new Array();
             }
             $.fn.jexcel.defaults[id] = options;
+            
+             // localDB
+            var json = localStorage.getItem('jData');
+            if (json!=null) {
+                options.localDB = jQuery.parseJSON(json);
+            } else {
+                options.localDB = [];
+            }
 
             // Create history track array
             $.fn.jexcel.defaults[id].history = [];
@@ -174,7 +183,15 @@ var methods = {
                     if (! $.fn.jexcel.defaults[id].columns[i].options.format) {
                         $.fn.jexcel.defaults[id].columns[i].options.format = 'DD/MM/YYYY';
                     }
-                }
+                } 
+                
+                
+                
+                
+                
+                
+                
+                
             }
 
             // In case there are external json to be loaded before create the table
@@ -338,7 +355,7 @@ var methods = {
             $('body').append(corner);
             $('body').append(textarea);
             $('body').append(contextMenu);
-            $('body').append(ads);
+            //$('body').append(ads);
 
             // Unselectable properties
             $(corner).prop('unselectable', 'yes');
@@ -414,7 +431,7 @@ var methods = {
                                 // Contextmenu content
                                 $("#jexcel_contextmenu").html(contextMenuContent);
 
-                                // Show jexcel context menu
+                                // Show jexcel context menu not show it now ###
                                 $("#jexcel_contextmenu").css({ display:'block', top: e.pageY + "px", left: e.pageX + "px" });
 
                                 // Avoid the real one
@@ -1117,6 +1134,7 @@ var methods = {
             });
         }
 
+        //$(this).jexcel('addLocalItem', $.fn.jexcel.defaults[id].data);
         // Load data
         $(this).jexcel('setData', $.fn.jexcel.defaults[id].data);
     },
@@ -1180,7 +1198,7 @@ var methods = {
         for (j = 0; j < $.fn.jexcel.defaults[id].data.length; j++) {
             // New line of data to be append in the table
             tr = document.createElement('tr');
-            // Index column
+            // Index column  1,2,3...
             $(tr).append('<td id="row-' + j + '" class="jexcel_label">' + parseInt(j + 1) + '</td>'); 
             // Data columns
             for (i = 0; i < $.fn.jexcel.defaults[id].colHeaders.length; i++) {
@@ -1234,6 +1252,7 @@ var methods = {
      * @return void
      */
     updateSettings : function(options) {
+        
         // Id
         var id = $(this).prop('id');
 
@@ -1242,6 +1261,7 @@ var methods = {
             if ($.fn.jexcel.defaults[id].updateSettingsOptions) {
                 options = $.fn.jexcel.defaults[id].updateSettingsOptions;
             }
+            //console.log("no options");
         }
 
         // Go through all cells
@@ -1789,6 +1809,8 @@ var methods = {
         }
     },
 
+    
+    
     /**
      * Load cell content
      * 
@@ -1940,6 +1962,22 @@ var methods = {
                 }
 
                 $(v.cell).html('<input type="hidden" value="' + value + '">' + val);
+            } else if (options.columns[position[0]].type == 'image') {
+                // Value
+                val = value;
+
+                if (value) {
+                    if (value.substr(0,1) == '=') {
+                        if ($.fn.jexcel.defaults[id].dynamicColumns.indexOf($(v.cell).prop('id')) == -1) {
+                            $.fn.jexcel.defaults[id].dynamicColumns.push($(v.cell).prop('id'));
+                        }
+                    }
+                }
+                if (value.length){
+                    $(v.cell).html('<img width="50px" height="50px" alt="-" src="' + value + '"/>');
+                }else{
+                    $(v.cell).html('<img width="50px" height="50px" alt="-" src="/img/nopic.png"/>');
+                }
             } else {
                 // Value
                 val = value;
@@ -2261,13 +2299,87 @@ var methods = {
                         row += delimiter;
                     }
                     // Get value
-                    val = $(this).jexcel('getValue', $(cell));
+
+                    if ($(cell).hasClass('readonly')){
+                        val = '""';
+                    }else{
+                        val = $(this).jexcel('getValue', $(cell));
+                    }
                     if (val.match(/,/g) || val.match(/\n/)) {
                         val = '"' + val + '"'; 
                     }
                     row += val;
                     pc = true;
                 }
+               
+            }
+            if (row) {
+                if (pr) {
+                    str += "\n";
+                }
+                str += row;
+                pr = true;
+            }
+        }
+
+        // Create a hidden textarea to copy the values
+        if (! returnData) {
+            txt = $('.jexcel_textarea');
+            $(txt).val(str);
+            $(txt).select();
+            document.execCommand("copy");
+        }
+
+        return str;
+    },
+    
+     /**
+     * CopyAll method
+     * 
+     * @param bool readonly - Get only not readonly cells
+     * @param delimiter - \t default to keep compatibility with excel
+     * @return string value
+     */
+    copyAll : function(readonly, delimiter, returnData) {
+        if (! delimiter) {
+            delimiter = "\t";
+        }
+
+        var str = '';
+        var row = '';
+        var val = '';
+        var pc = false;
+        var pr = false;
+
+        // Column and row length
+        var x = $(this).find('thead tr td').not(':first').length;
+        var y = $(this).find('tbody tr').length;
+
+        // Go through the columns to get the data
+        for (j = 0; j < y; j++) {
+            row = '';
+            pc = false;
+            for (i = 0; i < x; i++) {
+                // Get cell
+                cell = $(this).find('#' + i + '-' + j);
+                
+                if (pc) {
+                    row += delimiter;
+                }
+                // Get value
+                if ($(cell).hasClass('readonly')){
+                    val = '""';
+                }else{
+                    val = $(this).jexcel('getValue', $(cell));
+                }
+                if (val.match(/,/g) || val.match(/\n/)) {
+                    val = '"' + val + '"'; 
+                }
+                
+                row += val;
+                pc = true;
+                
+               
             }
             if (row) {
                 if (pr) {
@@ -2605,7 +2717,7 @@ var methods = {
         // Global Configuration
         if (options.allowDeleteRow == true) {
             // Can't remove the last row
-            if (options.data.length > 1) {
+            if (options.data.length > 0) {
                 if (parseInt(lineNumber) > -1) {
                     // Remove from source
                     $.fn.jexcel.defaults[id].data.splice(parseInt(lineNumber), numOfRows);
@@ -2984,8 +3096,8 @@ var methods = {
         $.each(variables, function (k, v) {
             i = $(main).jexcel('getColumnNameFromId', $(v).prop('id'));
             v = $(main).jexcel('getValue', $(v));
-            console.log(v);
-            console.log(Number(v));
+            //console.log(v);
+            //console.log(Number(v));
             if (v == Number(v)) {
                 window[i] = Number(v);
             } else {
@@ -3065,7 +3177,8 @@ var methods = {
 
     /**
      * Download CSV table
-     * 
+
+     * $('#my').jexcel('download');
      * @return null
      */
     download : function () {
@@ -3092,6 +3205,50 @@ var methods = {
         pom.setAttribute('download', 'jexcelTable.csv');
         pom.click();
     },
+    
+    /**
+     * upload CSV table
+     * $('#my').jexcel('upload');
+     * @param url
+     * @return null
+     */
+    upload : function (url) {
+        // Get table id
+        var id = $(this).prop('id');
+        // Increment and get the current history index
+        var options = $.fn.jexcel.defaults[id];
+        // Data
+        var data = '';
+
+        // Get headers if applicable
+        if (options.csvHeaders == true) {
+            data = options.colHeaders.join() + "\n";
+        }
+        
+        // Get data
+        data += $(this).jexcel('copyAll', true, ',', true);
+        // Upload elment
+        $.ajax({
+            url: url,
+            data: {data: data},
+            error: function() {
+                return "Error";
+            },
+            success: function (result) {
+               
+              if ($.trim(result) === "OK"){
+                  console.log("OK");
+              }else if ($.trim(result) === "SUSPI"){
+                  console.log("--");
+              }else{
+                  console.log("ERROR");
+              }              
+               
+            }
+        });
+        
+    },
+    
 
     /**
      * Initializes a new history record for undo/redo
@@ -3197,6 +3354,8 @@ var methods = {
             } else {
                 $(td).html('<input type="checkbox" onclick="var instance = $(this).parents(\'.jexcel\').parent(); $(instance).jexcel(\'setValue\', $(this).parent(), $(this).prop(\'checked\') ? 1 : 0);">');
             }
+        } else if (options.columns[i].type == 'image') {
+             //console.log("image");
         }
 
         // Readonly
@@ -3332,6 +3491,32 @@ var methods = {
     getColumnNameFromId : function (cellId) {
         var name = cellId.split('-');
         return $.fn.jexcel('getColumnName', name[0])  + (parseInt(name[1]) + 1);
+    },
+    addLocalItem:function(val){
+        // Id
+        var id = $(this).prop('id');
+        // Var options
+        var options = $.fn.jexcel.defaults[id];
+        options.localDB.push(val);
+        $(this).jexcel('saveLocalDB');
+    },
+    getLocalItem:function(){
+         // Id
+        var id = $(this).prop('id');
+        // Var options
+        var options = $.fn.jexcel.defaults[id];
+        var res = options.localDB[0];
+        options.localDB = options.localDB.slice(1);
+        $(this).jexcel('saveLocalDB');
+        return res;
+    },
+    saveLocalDB:function(){
+         // Id
+        var id = $(this).prop('id');
+        // Var options
+        var options = $.fn.jexcel.defaults[id];
+        var json = JSON.stringify(options.localDB);
+        localStorage.setItem('jData',json); 
     }
 };
 
